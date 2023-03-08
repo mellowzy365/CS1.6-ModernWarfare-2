@@ -1,0 +1,260 @@
+
+	#include <amxmodx>
+	#include <fakemeta>
+	#include <hamsandwich>
+
+	#define MAX_CLIENTS  32
+	#define MAX_WEAPONS  30
+    
+	new Float:g_OriWeaponSpeed[ MAX_CLIENTS + 1 ];
+	new Float:g_CoolDown      [ MAX_CLIENTS + 1 ];
+    
+	new g_SprintTime [ MAX_CLIENTS + 1 ];
+	new g_BreatheTime[ MAX_CLIENTS + 1 ];
+	new g_WeaponIndex[ MAX_CLIENTS + 1 ];
+	new g_WeaponId   [ MAX_CLIENTS + 1 ];
+
+	new bool:g_IsAlive   [ MAX_CLIENTS + 1 ];
+	new bool:g_IsPrinting[ MAX_CLIENTS + 1 ];
+
+	new g_pSpeedFactor;
+	new g_pMaxTime;
+	new g_pBreatheTime;
+	new g_pCoolDown;
+
+	new g_IdentTimer;
+	new g_MaxClients;
+
+	const m_pPlayer				= 41;
+	const m_iId					= 43;
+	const m_flNextPrimaryAttack	= 46;
+	const m_flNextSecondaryAttack	= 47;
+	const m_iFOV				= 363;
+	const m_pActiveItem			= 373;
+
+
+	public plugin_precache()
+	{
+		precache_sound("breathe.wav");
+	}
+    
+    
+	public plugin_init ()
+	{
+		register_plugin( "Weapon Sprint", "1.0.0", "Arkshine" );
+
+		g_pSpeedFactor = register_cvar( "ws_speed_factor", "1.5" );
+		g_pMaxTime     = register_cvar( "ws_max_time"    , "6" );
+		g_pBreatheTime = register_cvar( "ws_breathe_time", "6" );
+		g_pCoolDown    = register_cvar( "ws_cool_down"   , "6" );
+
+		RegisterHam( Ham_Spawn , "player", "Event_PlayerSpawn" , 1 );
+		RegisterHam( Ham_Killed, "player", "Event_PlayerKilled", 1 );
+		RegisterHam( Ham_Think , "info_target", "Event_TimerThink" );
+
+		new szWeaponName[ 24 ];
+		for ( new WeaponId = 1; WeaponId <= MAX_WEAPONS; WeaponId++ )
+		{
+			if ( get_weaponname ( WeaponId, szWeaponName, charsmax ( szWeaponName ) ) )
+			{
+				RegisterHam( Ham_CS_Item_GetMaxSpeed , szWeaponName, "Event_ItemGetMaxSpeed", 1 );
+			}
+		}
+
+		CreateTimer ();
+
+		register_clcmd( "+sprint", "ClientCommand_StartSprint" );
+		register_clcmd( "-sprint", "ClientCommand_StopSprint" );
+        
+		g_MaxClients = get_maxplayers();
+	}
+
+
+	CreateTimer ()
+	{
+		g_IdentTimer = engfunc( EngFunc_CreateNamedEntity, engfunc( EngFunc_AllocString, "info_target" ) );
+		set_pev( g_IdentTimer, pev_iuser1, g_IdentTimer );
+		set_pev( g_IdentTimer, pev_nextthink, get_gametime() + 1.0 );
+		dllfunc( DLLFunc_Spawn, g_IdentTimer );
+	}
+
+    
+	public client_connect ( id )
+	{
+		client_cmd( id, "cl_forwardspeed 220" );
+	}
+	
+	public Event_TimerThink ( const EntIndex )
+	{
+		if ( EntIndex == g_IdentTimer )
+		{
+			static PlayerId, BreatheTime, SprintTime, MaxBreatheTime, MaxSprintTime, Float:CoolDownTime;
+			
+			MaxSprintTime  = get_pcvar_num( g_pMaxTime );
+			MaxBreatheTime = get_pcvar_num( g_pBreatheTime );
+			CoolDownTime   = get_pcvar_float( g_pCoolDown );
+            
+			for( PlayerId = 1; PlayerId <= g_MaxClients; PlayerId++ )  if ( g_IsPrinting[ PlayerId ] )
+			{
+				BreatheTime = ( ++g_BreatheTime[ PlayerId ] );
+				SprintTime  = ( ++g_SprintTime [ PlayerId ] );
+				
+				
+				if ( !UTIL_IsMovingForward( PlayerId ) )
+				{
+					continue;
+				}
+				
+				else if ( SprintTime == MaxSprintTime )
+				{
+					g_CoolDown  [ PlayerId ] = get_gametime() + CoolDownTime;
+					g_SprintTime[ PlayerId ] = 0;
+					client_cmd( PlayerId, "-sprint" );
+					set_task(0.3, "stopsprinting", PlayerId, _, _, "a", 20)
+					client_cmd(PlayerId, "spk sound/breathe.wav");
+				}
+				else if ( BreatheTime > MaxBreatheTime )
+				{
+					//client_cmd(PlayerId, "spk sound/breathe.wav");
+				}
+			}
+            
+			set_pev( EntIndex, pev_nextthink, get_gametime() + 1.0 );
+		}
+	}
+
+	public stopsprinting(const PlayerId)
+	{
+		client_cmd(PlayerId, "cl_forwardspeed 220");
+		client_cmd( PlayerId, "cl_sidespeed 220" );
+	}
+
+	public client_disconnect ( PlayerId )
+	{
+		g_IsAlive   [ PlayerId ] = false;
+		g_IsPrinting[ PlayerId ] = false;
+	}
+
+
+	public Event_PlayerSpawn ( const PlayerId )
+    {
+		if ( is_user_alive( PlayerId ) )
+		{
+			g_IsAlive[ PlayerId ] = true;
+			client_cmd(PlayerId, "cl_forwardspeed 220");
+			client_cmd( PlayerId, "cl_sidespeed 220" )
+		}
+    }
+
+
+	public Event_PlayerKilled ( const VictimId, const AttackerId, const ShouldGib )
+    {
+		g_IsAlive[ VictimId ] = false;
+    }
+
+
+	public Event_ItemGetMaxSpeed ( const WeapIndex )
+    {
+		new PlayerId = get_pdata_cbase( WeapIndex, m_pPlayer, 4 );
+		GetOrigHamReturnFloat( g_OriWeaponSpeed[ PlayerId ] );
+
+		if ( g_IsPrinting[ PlayerId ] )
+		{
+			UTIL_SetNextAttack ( g_WeaponIndex[ PlayerId ], -0.001 );
+
+			g_IsPrinting[ PlayerId ] = false;
+			client_cmd( PlayerId, "-sprint;wait;+sprint" );
+        }
+    }
+
+
+    public ClientCommand_StartSprint ( const PlayerId )
+    {
+        if ( g_IsAlive[ PlayerId ] && UTIL_IsMovingForward ( PlayerId ) )
+        {
+			if ( g_CoolDown[ PlayerId ] >= get_gametime() )
+				{
+					return PLUGIN_HANDLED;
+				}
+        
+			CacheWeaponInfo ( PlayerId );
+            
+			g_IsPrinting[ PlayerId ] = true;
+			g_CoolDown  [ PlayerId ] = 0.0;
+
+			UTIL_SetPlayerSpeed ( PlayerId, 220.0 * get_pcvar_float( g_pSpeedFactor ) );
+			UTIL_SetNextAttack ( g_WeaponIndex[ PlayerId ], 9999.0 );
+			
+			callfunc_begin("ZoomFalse", "cwzNEW.amxx")
+			callfunc_push_int( PlayerId ); 
+			callfunc_end();
+			
+			UTIL_SetModel ( PlayerId, 0 );
+			client_cmd( PlayerId, "cl_forwardspeed 350" );
+			client_cmd( PlayerId, "cl_sidespeed 50" );
+        }
+        return PLUGIN_HANDLED;
+    }
+
+
+    public ClientCommand_StopSprint(const PlayerId )
+    {
+		if ( g_IsAlive[ PlayerId ] && g_IsPrinting[ PlayerId ] )
+		{
+			client_cmd(PlayerId, "cl_forwardspeed 220");
+			client_cmd( PlayerId, "cl_sidespeed 220" );
+			g_IsPrinting [ PlayerId ] = false;
+			g_BreatheTime[ PlayerId ] = 0;
+
+			UTIL_SetPlayerSpeed ( PlayerId, 220.0);
+			UTIL_SetNextAttack ( g_WeaponIndex[ PlayerId ], 1.0 );
+			
+			ExecuteHamB( Ham_Item_Deploy, g_WeaponIndex[ PlayerId ], 1 );
+
+			
+		}
+		return PLUGIN_HANDLED;
+    }
+
+
+    CacheWeaponInfo ( const PlayerId )
+    {
+		g_WeaponIndex[ PlayerId ] = get_pdata_cbase( PlayerId, m_pActiveItem );
+		g_WeaponId   [ PlayerId ] = get_pdata_int( g_WeaponIndex[ PlayerId ], m_iId, 4 );
+    }
+
+
+    UTIL_SetModel ( const PlayerId, const Model )
+    {
+        set_pev( PlayerId, pev_viewmodel, Model );
+        set_pev( PlayerId, pev_weaponmodel, Model );
+    }
+
+
+    UTIL_ResetZoom ( const PlayerId )
+    {
+        set_pdata_int( PlayerId, m_iFOV, 90 );
+    }
+
+
+    bool:UTIL_IsMovingForward ( const PlayerId )
+    {
+        static Buttons;
+        Buttons = pev( PlayerId, pev_button );
+
+        return ( Buttons == IN_FORWARD || Buttons == IN_FORWARD | IN_MOVELEFT || Buttons == IN_FORWARD | IN_MOVERIGHT );
+    }
+
+
+    UTIL_SetPlayerSpeed ( const PlayerId, const Float:Speed )
+    {
+        set_pev( PlayerId, pev_maxspeed, Speed );
+        engfunc( EngFunc_SetClientMaxspeed, PlayerId, Speed );
+    }
+
+
+    UTIL_SetNextAttack ( const WeapIndex, const Float:Delay )
+    {
+        set_pdata_float( WeapIndex, m_flNextPrimaryAttack, Delay );
+        set_pdata_float( WeapIndex, m_flNextSecondaryAttack, Delay );
+    }

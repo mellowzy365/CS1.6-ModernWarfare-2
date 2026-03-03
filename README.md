@@ -35,6 +35,6 @@ OS : Windows 7 or more
 
 RAM : 2gb or more
 
-GPU : Nvidia GeForce 7025 and better
+GPU : 4GB VRAM or better
 
 CPU : 2.90 GHz

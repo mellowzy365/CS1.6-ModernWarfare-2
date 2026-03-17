@@ -30,11 +30,3 @@ Metadrawer 1.5
 Recommended System Requirement :
 
 OPENGL Required for Metadrawer Render
-
-OS : Windows 7 or more
-
-RAM : 2gb or more
-
-GPU : 4GB VRAM or better
-
-CPU : 2.90 GHz

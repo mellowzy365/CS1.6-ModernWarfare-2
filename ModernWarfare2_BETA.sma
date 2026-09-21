@@ -103,9 +103,9 @@ NB : Not Recommended for Server
 
 #define UAV_Points 			3 //Point for unlock UAV
 #define CarePackage_Point 		4 //Point for unlock CarePackage
-#define AirStrike_Point 		6//Point for unlock AirStrike
+#define AirStrike_Point 		6 //Point for unlock AirStrike
 #define PredMissile_Point 		5 //Point for unlock PredMissile
-#define Sentrygun_Point 		5 //Point for unlock Sentrygun
+#define Sentrygun_Point 		10 //Point for unlock Sentrygun
 #define TacticalNuke_Point 		25 //Point for unlock Tactical Nuke
 #define Point_StealthBomber 		9 //point unlock stealth bomber
 

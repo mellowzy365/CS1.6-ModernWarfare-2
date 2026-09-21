@@ -267,8 +267,8 @@ NB : Not Recommended for Server
 new const MESSAGE[ ] = "Cover me... I'm reloading!";
 
 new const SOUNDS[ ][ ] = {
-	"radio/reloading01.wav",
-	"radio/reloading02.wav"
+	"",
+	""
 };
 
 new const ambience_s[] = "sound/ambience/background2.mp3";
